@@ -1,0 +1,96 @@
+#version 450 core
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout (rgba8,   binding = 0) uniform readonly image2D albedo;
+layout (r32i, 	 binding = 1) uniform iimage2D histogram;
+layout (r32f, 	 binding = 2) uniform image2D cdf;
+layout (rgba32f, binding = 3) uniform writeonly image2D gaussianized;
+
+uniform int uStep;
+uniform int cdf_size;
+uniform bool YCbCr;
+
+vec3 RGB2YCbCr(vec3 input_col)
+{
+	return vec3(
+		.299 * input_col.r + .587 * input_col.g + .114 * input_col.b,
+		-.168736 * input_col.r - .331264 * input_col.g + .5 * input_col.b	+ 0.5,
+		.5 * input_col.r - .418688 * input_col.g - .081312 * input_col.b + 0.5);
+}
+
+vec3 YCbCr2RGB(vec3 inpu_col)
+{
+	inpu_col -= vec3(0., 0.5, 0.5);
+	return vec3(
+		inpu_col.x + 1.402 * inpu_col.z,
+		inpu_col.x - 0.344136 * inpu_col.y - .714136 * inpu_col.z,
+		inpu_col.x + 1.772 * inpu_col.y);
+}
+
+void main() {
+
+	// init to 0
+	if (uStep == 0) 
+	{
+		ivec2 threadId = ivec3(gl_GlobalInvocationID.xyz).xy;
+		ivec2 histSize = imageSize(histogram);
+
+		imageStore(gaussianized, threadId, vec4(0));
+
+		if (threadId.x >= histSize.x || threadId.y >= histSize.y) return;
+
+		imageStore(histogram, threadId, ivec4(0));
+	}
+
+	// accumulate
+	else if (uStep == 1) 
+	{
+		ivec2 threadId = ivec3(gl_GlobalInvocationID.xyz).xy;
+
+		vec3 color = imageLoad(albedo, threadId).rgb;
+
+		if(YCbCr)
+		{
+			color = RGB2YCbCr(color);
+			imageAtomicAdd(histogram, ivec2(int(255 * color.r), 0), 1);
+		}
+		else
+		{
+			imageAtomicAdd(histogram, ivec2(int(255 * color.r), 0), 1);
+			imageAtomicAdd(histogram, ivec2(int(255 * color.g), 1), 1);
+			imageAtomicAdd(histogram, ivec2(int(255 * color.b), 2), 1);
+		}			
+	}
+
+	// gaussianize
+	else if (uStep == 2) 
+	{
+		ivec2 threadId = ivec3(gl_GlobalInvocationID.xyz).xy;
+		ivec2 size = imageSize(gaussianized);
+
+		vec3 color = imageLoad(albedo, threadId).rgb;
+
+		vec4 gauss = vec4(0);
+
+		if(YCbCr)
+		{
+			color = RGB2YCbCr(color);
+			gauss = vec4(
+				imageLoad(cdf, ivec2(int((cdf_size-1) * color.r), 0)).r,
+				color.g,
+				color.b,
+				1);
+		}
+		else
+		{
+			gauss = vec4(
+				imageLoad(cdf, ivec2(int((cdf_size-1) * color.r), 0)).r,
+				imageLoad(cdf, ivec2(int((cdf_size-1) * color.g), 1)).r,
+				imageLoad(cdf, ivec2(int((cdf_size-1) * color.b), 2)).r, 
+				1);
+		}
+
+		imageStore(gaussianized, threadId, gauss);
+	}
+}

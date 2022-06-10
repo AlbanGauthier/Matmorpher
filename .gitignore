@@ -1,0 +1,12 @@
+
+/build/
+
+*.exe
+*.ilk
+*.pdb
+*.png
+*.txt
+*.pdf
+*.dll
+*.gif
+*.hdr

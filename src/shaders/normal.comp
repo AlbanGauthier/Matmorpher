@@ -1,0 +1,104 @@
+#version 450 core
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout (binding = 1) uniform sampler2D height_map;
+layout (binding = 6) uniform sampler2D height_map_2;
+layout (binding = 3) uniform sampler2D normal_map;
+layout (binding = 8) uniform sampler2D normal_map_2;
+
+layout (rgba32f, 	binding = 0) 	uniform  			image2D gradient_map;
+layout (rgba32f, 	binding = 1) 	uniform  			image3D normal_map_table;
+layout (r32f,		binding = 2) 	uniform writeonly 	image3D normal_diff_table;
+
+uniform int 	step_;
+
+uniform int	 	mat_idx;
+uniform float 	depth;
+uniform float 	max_radius;
+
+void get_values_from_height(out float tab[9], sampler2D sampler_, vec2 tex_coord, float w, float h)
+{
+	tab[0] = texture(sampler_, tex_coord + vec2( -w, -h) ).x;
+	tab[1] = texture(sampler_, tex_coord + vec2( 0., -h) ).x;
+	tab[2] = texture(sampler_, tex_coord + vec2(  w, -h) ).x;
+	tab[3] = texture(sampler_, tex_coord + vec2( -w, 0.) ).x;
+	tab[4] = texture(sampler_, tex_coord + vec2( 0., 0.) ).x;
+	tab[5] = texture(sampler_, tex_coord + vec2(  w, 0.) ).x;
+	tab[6] = texture(sampler_, tex_coord + vec2( -w, h) ).x;
+	tab[7] = texture(sampler_, tex_coord + vec2( 0., h) ).x;
+	tab[8] = texture(sampler_, tex_coord + vec2(  w, h) ).x;
+}
+
+vec2 get_gradient_sobel(vec2 tex_coord, ivec2 size)
+{
+	float w = 1.0f / float(size.x);
+    float h = 1.0f / float(size.y);
+
+    float n[9];
+	if (mat_idx == 1)
+		get_values_from_height(n, height_map, 	tex_coord, w, h);
+	else if (mat_idx == 2)
+		get_values_from_height(n, height_map_2, tex_coord, w, h);
+
+    float sobel_x = n[2] + (2.0f * n[5]) + n[8] - (n[0] + (2.0f * n[3]) + n[6]);
+  	float sobel_y = n[0] + (2.0f * n[1]) + n[2] - (n[6] + (2.0f * n[7]) + n[8]);
+
+    return vec2(sobel_x, sobel_y);
+}
+
+void main() {
+
+    ivec3 int_coords = ivec3(gl_GlobalInvocationID); // in [0, depth[
+
+	ivec2 img_size = ivec2(0);
+
+	if (mat_idx == 1)
+		img_size = textureSize(height_map, 0).xy;
+	else if (mat_idx == 2)
+		img_size = textureSize(height_map_2, 0).xy;
+    
+	// taking into account the half pixel offset when reading in sampler !!
+	vec2 tex_coords = vec2((int_coords.x + 0.5f) / img_size.x, (int_coords.y + 0.5f) / img_size.y); 
+
+	// compute gradients
+	if (step_ == 0)
+	{
+		vec2 val = get_gradient_sobel(tex_coords, img_size);
+    	imageStore(gradient_map, int_coords.xy, vec4(val.xy, 0, 0));
+	}
+	
+	// compute normal 3D table
+	if (step_ == 1)
+	{
+		vec2 grad = imageLoad(gradient_map, int_coords.xy).xy;
+		float hf = max_radius * float(int_coords.z) / depth;
+
+		// should be (-grad_x, -grad_y, h_f) but opengl y convention is reversed
+		vec3 n = normalize(vec3(-grad.x, grad.y, hf));
+		
+		// imageStore(normal_map_table, int_coords.xyz, vec4(n, 0));
+		imageStore(normal_map_table, int_coords.xyz, vec4(n, 0));
+	}
+
+	// compute diff 3D table
+	if (step_ == 2)
+	{
+		vec3 normal = vec3(0);
+
+		if (mat_idx == 1)
+			normal = 2.0 * texture(normal_map, tex_coords).xyz - 1.0;
+		else if (mat_idx == 2)
+			normal = 2.0 * texture(normal_map_2, tex_coords).xyz - 1.0;
+
+		vec3 comp_n = imageLoad(normal_map_table, int_coords.xyz).xyz;
+
+		// vec3 diff = normal - comp_n;
+
+		// float L1norm = abs(diff.x) + abs(diff.y) + abs(diff.z);
+
+		float L1norm = acos(clamp(dot(normal, comp_n), 0, 1));
+
+		imageStore(normal_diff_table, int_coords.xyz, vec4(L1norm));
+	}
+}

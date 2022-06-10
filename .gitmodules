@@ -1,0 +1,9 @@
+[submodule "libs/glad"]
+	path = libs/glad
+	url = https://github.com/Dav1dde/glad.git
+[submodule "libs/glm"]
+	path = libs/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "libs/stb"]
+	path = libs/stb
+	url = https://github.com/nothings/stb.git
