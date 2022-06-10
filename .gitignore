@@ -4,9 +4,7 @@
 *.exe
 *.ilk
 *.pdb
-*.png
 *.txt
-*.pdf
 *.dll
-*.gif
+*.pdf
 *.hdr
