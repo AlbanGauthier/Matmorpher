@@ -89,7 +89,7 @@ int main(int argc, char* argv[])
 			}
 		}
 		else if (cmd == "warpgrid") {
-			// warpgrid clover4K 01000 fish4K 01000 128 4000 200
+			// warpgrid clover4K 01000 fish4K 01000 128 200 4000
 			if (argc == 6 || argc == 9)
 			{
 				Warpgrid warpgrid(argc, argv, WarpgridType::Compute);

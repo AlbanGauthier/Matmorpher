@@ -85,8 +85,8 @@ Matmorpher.exe warpgrid mat1_folder XXXXX mat2_folder XXXXX grid_size alpha beta
 
 Where:
 - grid_size is the height/width of the warpgrid (default: 128)
-- alpha modulates the interior regularity term (default: 4000)
-- beta modulates the periodic harmonicity term (default: 200)
+- alpha modulates the interior regularity term (default: 200)
+- beta modulates the periodic harmonicity term (default: 4000)
 
 ### Remarks
 
